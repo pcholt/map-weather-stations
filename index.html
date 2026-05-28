@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Australian Weather Stations</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: sans-serif; }
+    #map { height: 100%; }
+
+    #info {
+      position: absolute;
+      top: 10px; right: 10px;
+      z-index: 1000;
+      background: white;
+      padding: 12px 16px;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      min-width: 200px;
+    }
+    #info h2 { font-size: 14px; margin-bottom: 8px; }
+    #info .stat { font-size: 13px; color: #444; margin-bottom: 4px; }
+    #info .stat span { font-weight: bold; }
+
+    #legend {
+      position: absolute;
+      bottom: 30px; right: 10px;
+      z-index: 1000;
+      background: white;
+      padding: 10px 14px;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      font-size: 13px;
+    }
+    #legend .item { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    #legend .dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      border: 2px solid white;
+      box-shadow: 0 0 0 1px #aaa;
+      flex-shrink: 0;
+    }
+    .dot-active { background: #e74c3c; }
+
+    #filters {
+      position: absolute;
+      top: 10px; left: 50px;
+      z-index: 1000;
+      background: white;
+      padding: 8px 12px;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      font-size: 13px;
+    }
+    #filters label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+    #filters select {
+      font-size: 13px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 2px 4px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="info">
+  <h2>Australian Weather Stations</h2>
+  <div class="stat">Active: <span id="stat-active">—</span></div>
+  <div class="stat">Showing: <span id="stat-showing">—</span></div>
+</div>
+
+<div id="filters">
+  State:
+  <select id="sel-state">
+    <option value="">All</option>
+  </select>
+</div>
+
+<div id="legend">
+  <div class="item"><div class="dot dot-active"></div> Active station</div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+const map = L.map('map').setView([-25.3, 133.8], 4);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  maxZoom: 19,
+}).addTo(map);
+
+const ACTIVE_STYLE = { radius: 8, fillColor: '#e74c3c', color: '#fff', weight: 1, fillOpacity: 0.9 };
+
+let allStations = [];
+let clusterGroup = null;
+
+function buildPopup(s) {
+  return `
+    <b>${s.name}</b><br>
+    <table style="font-size:12px;border-collapse:collapse;margin-top:4px">
+      <tr><td style="color:#666;padding-right:8px">Site</td><td>${s.site}</td></tr>
+      <tr><td style="color:#666">State</td><td>${s.state}</td></tr>
+      <tr><td style="color:#666">Period</td><td>${s.start ?? '?'} – ${s.end ?? 'active'}</td></tr>
+      <tr><td style="color:#666">Lat / Lon</td><td>${s.lat}, ${s.lon}</td></tr>
+      ${s.height != null ? `<tr><td style="color:#666">Height</td><td>${s.height} m</td></tr>` : ''}
+      ${s.wmo ? `<tr><td style="color:#666">WMO</td><td>${s.wmo}</td></tr>` : ''}
+      ${s.source ? `<tr><td style="color:#666">Source</td><td>${s.source}</td></tr>` : ''}
+    </table>`;
+}
+
+function renderMarkers(stations) {
+  if (clusterGroup) map.removeLayer(clusterGroup);
+
+  clusterGroup = L.markerClusterGroup({
+    chunkedLoading: true,
+    maxClusterRadius: 40,
+  });
+
+  stations.forEach(s => {
+    const marker = L.circleMarker([s.lat, s.lon], ACTIVE_STYLE);
+    marker.bindPopup(buildPopup(s), { maxWidth: 260 });
+    clusterGroup.addLayer(marker);
+  });
+
+  map.addLayer(clusterGroup);
+  document.getElementById('stat-showing').textContent = stations.length.toLocaleString();
+}
+
+function applyFilters() {
+  const state = document.getElementById('sel-state').value;
+
+  const filtered = allStations.filter(s => {
+    if (state && s.state !== state) return false;
+    return true;
+  });
+
+  renderMarkers(filtered);
+}
+
+fetch('output/stations.json')
+  .then(r => r.json())
+  .then(data => {
+    allStations = data.stations.filter(s => s.lat != null && s.lon != null && s.end == null);
+
+    document.getElementById('stat-active').textContent = allStations.length.toLocaleString();
+
+    // Populate state dropdown
+    const states = [...new Set(allStations.map(s => s.state).filter(Boolean))].sort();
+    const sel = document.getElementById('sel-state');
+    states.forEach(st => {
+      const opt = document.createElement('option');
+      opt.value = st;
+      opt.textContent = st;
+      sel.appendChild(opt);
+    });
+
+    renderMarkers(allStations);
+
+    document.getElementById('sel-state').addEventListener('change', applyFilters);
+  });
+</script>
+</body>
+</html>

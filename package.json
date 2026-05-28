@@ -1,0 +1,11 @@
+{
+  "name": "map-weather-stations",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "npx serve .",
+    "txt-to-json": "node txt-to-json.js",
+    "json-to-kml": "node json-to-kml.js",
+    "convert": "node txt-to-json.js && node json-to-kml.js"
+  }
+}
