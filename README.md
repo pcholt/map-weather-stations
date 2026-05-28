@@ -2,7 +2,7 @@
 
 An interactive map of active Bureau of Meteorology weather stations across Australia, built with Leaflet.js and OpenStreetMap — no API keys required.
 
-![Map showing clustered weather station markers across Australia](https://github.com/user-attachments/assets/placeholder)
+![Map showing clustered weather station markers across Australia](image.png)
 
 ## What it does
 
